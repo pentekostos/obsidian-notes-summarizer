@@ -1,4 +1,4 @@
-import { Plugin, PluginSettingTab, Setting } from 'obsidian';
+import { Plugin, PluginSettingTab, Setting, MarkdownView, Notice } from 'obsidian';
 import { TFile } from 'obsidian';
 
 interface SummarizerSettings {
@@ -16,27 +16,43 @@ export default class SummarizerPlugin extends Plugin {
 	async onload() {
 		await this.loadSettings();
 		this.addCommand({
-			id: 'get-modified-files-content',
-			name: 'Get Modified Files Content',
-			checkCallback: (checking: boolean) => {
-				if (!checking) {
-					this.getModifiedFilesContent().then((content) => {
-						generateSummary(this.settings.GPTAPIKey, content).then((summary) => {
-							console.log("sending request to GPT")
-							console.log(summary);
-						});
-					});
-				}
-				return true;
-			},
+		  id: 'get-modified-files-content',
+		  name: 'Get Modified Files Content',
+		  checkCallback: (checking: boolean) => {
+			if (!checking) {
+			  this.getModifiedFilesContent().then((content) => {
+				generateSummary(this.settings.GPTAPIKey, content).then((summary) => {
+				  console.log("sending request to GPT");
+				  console.log(summary);
+	  
+				  // Get the active view and editor
+				  const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
+				  if (activeView) {
+					const editor = activeView.editor;
+	  
+					// Replace the selected text with the summary
+					editor.replaceSelection(summary);
+	  
+					// Display a message
+					new Notice('Summary added to the selection buffer');
+				  } else {
+					new Notice('No active Markdown view found');
+				  }
+				});
+			  });
+			}
+			return true;
+		  },
 		});
 		this.addSettingTab(new SummarizerSettingTab(this.app, this));
-	}
+	  }
+	  
+	  
 
 
 	async getModifiedFilesContent(): Promise<string> {
 		const currentTime = new Date().getTime();
-		const oneWeekAgo = currentTime - 7 * 24 * 60 * 60 * 1000;
+		const oneWeekAgo = currentTime - 14 * 24 * 60 * 60 * 1000;
 		const files = this.app.vault.getFiles();
 
 		let content = '';
@@ -90,7 +106,8 @@ async function generateSummary(apiKey: string, content: string): Promise<string>
 			messages: [
 				{
 					role: 'user',
-					content: `Summarize this content into a list of bullets organized by subject ordered by perceived importance. At the bottom of the output, provide flashcards for important facts: ${content}`,
+					content: `Summarize this content. Use Markdown format. Add flascards and footnotes at the bottom.: ${content}`,
+					max_tokens: 16000,
 				},
 			],
 		};
