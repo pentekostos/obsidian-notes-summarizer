@@ -14,7 +14,6 @@ const DEFAULT_SETTINGS: SummarizerSettings = {
 export default class SummarizerPlugin extends Plugin {
 	settings: SummarizerSettings;
 
-
 	async onload() {
 		await this.loadSettings();
 		this.addCommand({
@@ -23,10 +22,13 @@ export default class SummarizerPlugin extends Plugin {
 			checkCallback: (checking: boolean) => {
 				if (!checking) {
 					this.getModifiedFilesContent().then((content) => {
-						generateSummary(this.settings.GPTAPIKey, content).then((summary) => {
+						const estimatedTokens = Buffer.byteLength(content, 'utf8') / 4;
+						console.log("Estimated number of tokens:", estimatedTokens);
+						const maxTokens = 8000 - estimatedTokens - 1000;
+						generateSummary(this.settings.GPTAPIKey, content, maxTokens).then((summary) => {
 							console.log("sending request to GPT");
 							console.log(summary);
-
+	
 							// Copy the summary to the clipboard
 							navigator.clipboard.writeText(summary).then(() => {
 								// Notification when the response from GPT-4 is ready
@@ -61,11 +63,12 @@ export default class SummarizerPlugin extends Plugin {
 				}
 			}
 		}
-
+		console.log("GPT context:")
+		console.log(content)
+		const estimatedTokens = Buffer.byteLength(content, 'utf8') / 4;
+		console.log("Estimated number of tokens:", estimatedTokens);
 		return content;
 	}
-
-
 
 	async loadSettings() {
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
@@ -77,39 +80,39 @@ export default class SummarizerPlugin extends Plugin {
 
 }
 
-async function generateSummary(apiKey: string, content: string): Promise<string> {
-	return new Promise(async (resolve, reject) => {
-		const xhr = new XMLHttpRequest();
-		const url = 'https://api.openai.com/v1/chat/completions';
+async function generateSummary(apiKey: string, content: string, maxTokens: number): Promise<string> {
+    return new Promise(async (resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        const url = 'https://api.openai.com/v1/chat/completions';
 
-		xhr.open('POST', url, true);
-		xhr.setRequestHeader('Content-Type', 'application/json;charset=UTF-8');
-		xhr.setRequestHeader('Authorization', `Bearer ${apiKey}`);
+        xhr.open('POST', url, true);
+        xhr.setRequestHeader('Content-Type', 'application/json;charset=UTF-8');
+        xhr.setRequestHeader('Authorization', `Bearer ${apiKey}`);
 
-		xhr.onreadystatechange = () => {
-			if (xhr.readyState === 4) {
-				if (xhr.status === 200) {
-					const response = JSON.parse(xhr.responseText);
-					resolve(response.choices[0].message.content);
-				} else {
-					reject(new Error('Request failed'));
-				}
-			}
-		};
+        xhr.onreadystatechange = () => {
+            if (xhr.readyState === 4) {
+                if (xhr.status === 200) {
+                    const response = JSON.parse(xhr.responseText);
+                    resolve(response.choices[0].message.content);
+                } else {
+                    reject(new Error('Request failed'));
+                }
+            }
+        };
 
-		const payload = {
-			model: 'gpt-4',
-			messages: [
-				{
-					role: 'user',
-					content: `Summarize this content. Use Markdown format. Add flascards and footnotes at the bottom.: ${content}`,
-				},
-			],
-			max_tokens: 4000,
-		};
+        const payload = {
+            model: 'gpt-4',
+            messages: [
+                {
+                    role: 'user',
+                    content: `Summarize this content. Use Markdown format. Add flascards and footnotes at the bottom.: ${content}`,
+                },
+            ],
+            max_tokens: 1000,
+        };
 
-		xhr.send(JSON.stringify(payload));
-	});
+        xhr.send(JSON.stringify(payload));
+    });
 }
 
 
